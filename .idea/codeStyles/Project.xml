@@ -1,0 +1,21 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <JavaCodeStyleSettings>
+      <option name="IMPORT_LAYOUT_TABLE">
+        <value>
+          <package name="" withSubpackages="true" static="true" />
+          <emptyLine />
+          <package name="java" withSubpackages="true" static="false" />
+          <package name="javax" withSubpackages="true" static="false" />
+          <emptyLine />
+          <package name="" withSubpackages="true" static="false" />
+          <emptyLine />
+          <package name="io.choerodon" withSubpackages="true" static="false" />
+        </value>
+      </option>
+    </JavaCodeStyleSettings>
+    <ScalaCodeStyleSettings>
+      <option name="TYPE_ANNOTATION_LOCAL_DEFINITION" value="true" />
+    </ScalaCodeStyleSettings>
+  </code_scheme>
+</component>
