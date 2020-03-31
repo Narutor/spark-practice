@@ -1,5 +1,6 @@
 package 基础练习.hive
 
+import com.typesafe.scalalogging.Logger
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
@@ -11,6 +12,7 @@ import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.KafkaUtils
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.slf4j.LoggerFactory
 
 /**
  * description
@@ -18,8 +20,10 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  * @author 漩涡鸣人 2020/03/24 11:46
  */
 object SparkStreamToHive {
+  private val log = Logger(LoggerFactory.getLogger(SparkStreamToHive.getClass))
   def main(args: Array[String]): Unit = {
-
+    System.setProperty("HADOOP_USER_NAME", "hive")
+    System.setProperty("user.name", "hive")
     val conf: SparkConf = new SparkConf().setAppName("text")
       .setMaster("local[*]")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -28,9 +32,9 @@ object SparkStreamToHive {
     val session: SparkSession = SparkSession.builder()
       .config(conf)
       // 指定hive的metastore的端口  默认为9083 在hive-site.xml中查看
-      .config("hive.metastore.uris", "thrift://naruto:9083")
+      .config("hive.metastore.uris", "thrift://hdsp001:9083")
       //指定hive的warehouse目录
-      .config("spark.sql.warehouse.dir", "hdfs://naruto:8020/user/hive/warehouse")
+      .config("spark.sql.warehouse.dir", "hdfs://hdsp001:8020/warehouse/")
       //直接连接hive
       .enableHiveSupport()
       .getOrCreate()
@@ -38,35 +42,37 @@ object SparkStreamToHive {
     val ssc = new StreamingContext(session.sparkContext, Seconds(5))
 
     val kafkaParams = Map[String, Object](
-      "bootstrap.servers" -> "sasuky:9092,naruto:9092,sakura:9092",
+      "bootstrap.servers" -> "hdsp001:6667,hdsp002:6667,hdsp003:6667",
       "key.deserializer" -> classOf[StringDeserializer],
       "value.deserializer" -> classOf[StringDeserializer],
       "group.id" -> "stream",
-      "auto.offset.reset" -> "latest",
+      "auto.offset.reset" -> "earliest",
       "enable.auto.commit" -> (false: java.lang.Boolean)
     )
 
-    val topics: Array[String] = Array("testTopic")
+    val topics: Array[String] = Array("test_demo01")
     val stream: InputDStream[ConsumerRecord[String, String]] = KafkaUtils.createDirectStream[String, String](
       ssc,
       PreferConsistent,
       Subscribe[String, String](topics, kafkaParams)
     )
 
-    stream.
+
     val result = stream.foreachRDD(rdd => {
       //      val ranges: Array[OffsetRange] = rdd.asInstanceOf[HasOffsetRanges].offsetRanges //获取到分区和偏移量信息
-      val events: RDD[Some[String]] = rdd.map(x => {
+      val events: RDD[Row] = rdd.map(x => {
         val data: String = x.value()
-        Some(data)
+        val arry = data.split(" ")
+        Row(arry(0),arry(1),arry(2),arry(3))
       })
       // 开启动态分区
       session.sql("set hive.exec.dynamic.partition=true")
       session.sql("set hive.exec.dynamic.partition.mode=nonstrict")
-      val dataRow: RDD[Row] = events.map(line => {
-        val temp: Array[String] = line.get.split(" ")
-        Row(temp(0), temp(1), temp(2), temp(3))
+     /* val dataRow: RDD[Row] = events.map(line => {
+//        val temp: Array[String] = line.get.split(" ")
+        Row("first", "second", "third", "fourth")
       })
+      dataRow.foreach(println)*/
       val structType: StructType = StructType(Array(
         StructField("first", StringType, true),
         StructField("second", StringType, true),
@@ -74,11 +80,16 @@ object SparkStreamToHive {
         StructField("fourth", StringType, true)
       ))
 
-      val df: DataFrame = session.createDataFrame(dataRow, structType)
+      val df: DataFrame = session.createDataFrame(events, structType)
+      df.show(false)
       //写入hive
-      df.write.mode(SaveMode.Append)
+     /* df.write.mode(SaveMode.Append)
         .format("parquet")
-        .insertInto("test.test_demo")
+        .insertInto("test.test_demo01")*/
+      //写入hive  这个方法可以自动创表
+        df.write.mode("append")
+          .format("parquet")
+        .saveAsTable("test.test_demo01")
     })
 
     ssc.start()
